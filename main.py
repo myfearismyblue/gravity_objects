@@ -1,6 +1,7 @@
 import tkinter as tk
 from math import pi, tan, atan, sin, cos
 from global_vars import *
+from collections import deque
 
 
 def main():
@@ -13,6 +14,7 @@ def main():
     canvas.bind('<Key>', lambda event: key_and_mouse_handler(event, gravity, planet_stencil))
     canvas.bind('<KeyRelease>', lambda event: key_and_mouse_handler(event, gravity, planet_stencil))
     canvas.bind('<Button-1>', lambda event: key_and_mouse_handler(event, gravity, planet_stencil))
+    canvas.bind('<Alt-Button-1>', lambda event: key_and_mouse_handler(event, gravity, planet_stencil))
     canvas.bind('<Button-3>', lambda event: key_and_mouse_handler(event, gravity, planet_stencil))
     canvas.bind('<Motion>', lambda event: key_and_mouse_handler(event, gravity, planet_stencil))
     canvas.bind('<MouseWheel>', lambda event: key_and_mouse_handler(event, gravity, planet_stencil))
@@ -21,11 +23,13 @@ def main():
     tick(gravity, planet_stencil)
     root.mainloop()
 
+def stub_handler(event, gravity, panet_stancil):
+    print(event)
 
 def init_objects():
     """Init some object before ticking loop"""
     gravity = Gravity()
-    planet_stencil = Planet_Stencil()
+    planet_stencil = PlanetStencil()
     return gravity, planet_stencil
 
 
@@ -41,7 +45,9 @@ def key_and_mouse_handler(event, gravity, planet_stencil):
     """Handles key-presses and mouse events"""
     if str(event.type) == 'KeyPress':
         if event.keysym == 'space':
+            # On space press clear the canvas
             gravity.del_all_objects()
+            planet_stencil.show()
         elif event.keysym == 'Shift_L':
             planet_stencil.show()
     elif str(event.type) == 'KeyRelease':
@@ -50,26 +56,32 @@ def key_and_mouse_handler(event, gravity, planet_stencil):
 
     elif str(event.type) == 'ButtonPress':
         if event.num == 1:
-            planet = Planet(planet_stencil.visual_x * DISTANCE_FACTOR, planet_stencil.visual_y * DISTANCE_FACTOR,
-                            0, 0, PLANET_DENSITY, planet_stencil.visual_r * RADIUS_PROPORTION_FACTOR, PLANET_COLOR)
-            gravity.add_object_to_list(planet)
+            # In left click
+            if event.state == 131080:
+                # Left Alt pressed
+                planet = Planet(planet_stencil.visual_x * DISTANCE_FACTOR, planet_stencil.visual_y * DISTANCE_FACTOR,
+                                0, 0, PLANET_DENSITY, planet_stencil.visual_r * RADIUS_PROPORTION_FACTOR,
+                                PLANET_IMMOVABLE_COLOR, movable=False)
+                gravity.add_object_to_list(planet)
+            else:
+                planet = Planet(planet_stencil.visual_x * DISTANCE_FACTOR, planet_stencil.visual_y * DISTANCE_FACTOR,
+                                0, 0, PLANET_DENSITY, planet_stencil.visual_r * RADIUS_PROPORTION_FACTOR, PLANET_COLOR)
+                gravity.add_object_to_list(planet)
         elif event.num == 3:
+            # On right-click delete planet on a distance less then stencil radius
             sten_x, sten_y, sten_r = planet_stencil.get_canvas_coords()
             for object_ in gravity.get_objects_list():
                 obj_x, obj_y, _ = object_.get_object_canvas_coords()
-                if (obj_x - sten_x)**2 + (obj_y - sten_y)**2 <= sten_r**2:
+                if (obj_x - sten_x) ** 2 + (obj_y - sten_y) ** 2 <= sten_r ** 2:
                     object_.delete_from_canvas()
                     gravity.del_object(object_)
-
-            # planet_stencil. X, Y R
-            # если для одного из объектов gravity_list выполняется х - х + у -у < R**2
-            # удалить объект
 
     elif str(event.type) == 'Motion':
         planet_stencil.set_canvas_coords(event.x, event.y, planet_stencil.visual_r)
         planet_stencil.show()
 
     elif str(event.type) == 'MouseWheel':
+        # Increase stencil radius
         if event.delta >= 0:
             planet_stencil.visual_r += 2
             planet_stencil.show()
@@ -82,43 +94,45 @@ def key_and_mouse_handler(event, gravity, planet_stencil):
 class Planet:
     """Any gravitating object"""
 
-    def __init__(self, x, y, dx, dy, density, r, color):
+    def __init__(self, x, y, dx, dy, density, r, color, movable=True):
         self.x, self.y, self.dx, self.dy, self.density, self.r, self.color = x, y, dx, dy, density, r, color
         self.mass = self.density * 4. / 3. * pi * self.r ** 3.
-
+        self.movable = movable
         self.id = False
-        self.visual_r = self.r / RADIUS_PROPORTION_FACTOR
-        self.visual_x = self.x / DISTANCE_FACTOR
-        self.visual_y = self.y / DISTANCE_FACTOR
-        self.counter = 0    # counter to show trajectory
+        self.counter = 0  # counter to show trajectory
+        self.trajectory_queue = deque()
 
     def delete_from_canvas(self):
         if self.id:
             canvas.delete(self.id)
+            for point in self.trajectory_queue:
+                canvas.delete(point)
+            self.trajectory_queue = deque()
             self.id = False
 
     def _calculate_visual_params(self):
-        self.visual_r = self.r / RADIUS_PROPORTION_FACTOR
-        self.visual_x = self.x / DISTANCE_FACTOR
-        self.visual_y = self.y / DISTANCE_FACTOR
+        visual_r = self.r / RADIUS_PROPORTION_FACTOR
+        visual_x = self.x / DISTANCE_FACTOR
+        visual_y = self.y / DISTANCE_FACTOR
+        return visual_x, visual_y, visual_r
 
     def show(self):
         """Shows on canvas"""
-        self._calculate_visual_params()
+        visual_x, visual_y, visual_r = self._calculate_visual_params()
         self._show_trajectory()
         if self.id:  # check, if it has been drawn
             canvas.coords(self.id,  # if so, then redraw coords
-                          self.visual_x - self.visual_r,
-                          self.visual_y - self.visual_r,
-                          self.visual_x + self.visual_r,
-                          self.visual_y + self.visual_r
+                          visual_x - visual_r,
+                          visual_y - visual_r,
+                          visual_x + visual_r,
+                          visual_y + visual_r
                           )
 
         else:  # if it hasn't been drawn, then draw
-            self.id = canvas.create_oval(self.visual_x - self.visual_r,
-                                         self.visual_y - self.visual_r,
-                                         self.visual_x + self.visual_r,
-                                         self.visual_y + self.visual_r,
+            self.id = canvas.create_oval(visual_x - visual_r,
+                                         visual_y - visual_r,
+                                         visual_x + visual_r,
+                                         visual_y + visual_r,
                                          fill=self.color
                                          )
 
@@ -127,17 +141,23 @@ class Planet:
         return self.mass, self.x, self.y
 
     def get_object_canvas_coords(self):
-        return self.visual_x, self.visual_y, self.visual_r
+        return self.x / DISTANCE_FACTOR, self.y / DISTANCE_FACTOR, self.r / RADIUS_PROPORTION_FACTOR
 
     def _show_trajectory(self):
         if self.id:
             self.counter += 1
             if self.counter % 50 == 0:
                 self.counter = 0
-                canvas.create_oval(self.visual_x, self.visual_y, self.visual_x, self.visual_y, fill='black')
+                visual_x, visual_y, visual_r = self._calculate_visual_params()
+                self.trajectory_queue.append(
+                    canvas.create_oval(visual_x, visual_y,
+                                       visual_x, visual_y, fill=TRAJECTORY_COLOR))
+                if len(self.trajectory_queue) >= TRAJECTORY_LENGTH:
+                    canvas.delete(self.trajectory_queue.popleft())
 
-class Planet_Stencil:
-    def __init__(self, visual_x=0, visual_y=0, visual_r=0):
+
+class PlanetStencil:
+    def __init__(self, visual_x=0, visual_y=0, visual_r=1):
         self.id = False
         self.visual_r = visual_r
         self.visual_x = visual_x
@@ -205,10 +225,14 @@ class Gravity:
         return object_.mass, object_.x, object_.y
 
     def _set_objects_velocity(self, object_, force_x, force_y):
-        object_.dx = object_.dx + TIME_FACTOR * force_x / object_.mass
-        object_.dy = object_.dy + TIME_FACTOR * force_y / object_.mass
+        if object_.movable:
+            object_.dx = object_.dx + TIME_FACTOR * force_x / object_.mass
+            object_.dy = object_.dy + TIME_FACTOR * force_y / object_.mass
+        else:
+            object_.dx = 0
+            object_.dy = 0
 
-    def _set_objects_coords(self, object_):
+    def _move_object(self, object_):
         object_.x += TIME_FACTOR * object_.dx
         object_.y += TIME_FACTOR * object_.dy
 
@@ -253,11 +277,12 @@ class Gravity:
     def update(self):
         for i in range(0, len(self.objects_list)):
             object_1 = self.objects_list[i]
-            self._set_objects_coords(object_1)
-            for j in list(range(0, i)) + list(range(i+1, len(self.objects_list))):
+            for j in list(range(0, i)) + list(range(i + 1, len(self.objects_list))):
                 object_2 = self.objects_list[j]
                 force_x2, force_y2, force_x1, force_y1 = self._calculate_gravity(object_2, object_1)
                 self._set_objects_velocity(object_2, force_x2, force_y2)
+        for object_ in self.objects_list:
+            self._move_object(object_)
 
 
 if __name__ == '__main__':
