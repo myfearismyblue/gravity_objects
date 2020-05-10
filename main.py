@@ -146,13 +146,24 @@ class Planet:
     def _show_trajectory(self):
         if self.id:
             self.counter += 1
-            if self.counter % 50 == 0:
+            if self.counter % TRAJECTORY_FRAME_INTERVAL == 0:
                 self.counter = 0
                 visual_x, visual_y, visual_r = self._calculate_visual_params()
+                # self.trajectory_queue.append(
+                #     canvas.create_oval(visual_x, visual_y,
+                #                        visual_x, visual_y, fill=TRAJECTORY_COLOR))
+                # Appending line to trajectory
+                if len(self.trajectory_queue) > 1:
+                    visual_x0 = canvas.coords(self.trajectory_queue[-1])[2] # -3 is previous oval index
+                    visual_y0 = canvas.coords(self.trajectory_queue[-1])[3]
+                else:
+                    visual_x0 = visual_x
+                    visual_y0 = visual_y
                 self.trajectory_queue.append(
-                    canvas.create_oval(visual_x, visual_y,
+                    canvas.create_line(visual_x0, visual_y0,
                                        visual_x, visual_y, fill=TRAJECTORY_COLOR))
-                if len(self.trajectory_queue) >= TRAJECTORY_LENGTH:
+
+                if len(self.trajectory_queue) >= TRAJECTORY_LENGTH:    # n-length contains n+1 ovals and n lines
                     canvas.delete(self.trajectory_queue.popleft())
 
 
